@@ -11,19 +11,13 @@ A universal launcher for Linux that routes whatever you type to the right tool �
 
 ## Features
 
-- **`?` ask AI** — uses your default provider, answer copied to clipboard
-- **`??` deep model** — same provider, stronger model
-- **`?a` / `?o` / `?g` / `?l` / `?c`** — force a specific provider for one query
-  (Anthropic / OpenAI / Groq / Ollama local / Ollama Cloud) · prepend `??` for the deep variant
-- **5 AI providers supported** — Anthropic Claude, OpenAI, Groq, local Ollama, Ollama Cloud
-- **`=` calculator** — qalc with units, currency, dates
-- **`g` / `gh` / `yt` / `w` / `d`** — Google / GitHub / YouTube / Wikipedia / DuckDuckGo
-- **`>` shell** — run any command, see the output in a popup
-- **`:emoji`** — emoji picker (via rofimoji)
-- **URL** — opens in your browser
-- **anything else** — falls through to the rofi app launcher
-- **history** — past queries appear as fuzzy-searchable suggestions
-- **catppuccin-styled rofi themes** — separate prompt + result-view themes
+- **Pure AI chat from a rofi popup.** Hit your hotkey, pick which AI you want for this session (your configured default is pre-highlighted — Enter accepts), then talk.
+- **Real multi-turn context** — every reply is computed with the full prior conversation, not as isolated questions.
+- **5 providers supported** — Anthropic Claude, OpenAI GPT, Groq Llama, local Ollama, Ollama Cloud. Per-session choice, no per-message prefixes to remember.
+- **Latest reply rendered in-line** above the input on the next turn, so you read the answer the same place you type the follow-up.
+- **Answers auto-copied to clipboard.**
+- **Bubbletea TUI for settings** — `launch --config` to edit provider, models, and keys with arrow keys.
+- **Catppuccin-styled rofi themes** — separate prompt + chat-view themes.
 
 ## Install
 
@@ -122,24 +116,13 @@ ai-rofi-config show         # prints current config as YAML
 
 The bash launcher invokes `ai-rofi-config export` on every run if `config.yaml` exists, falling back to the legacy shell config otherwise — so this remains fully backward compatible.
 
-## Examples
+## Flow
 
-| Type                                  | What happens                                       |
-|---------------------------------------|----------------------------------------------------|
-| `? best way to debug a memleak`       | default provider, fast model                       |
-| `?? design a rate limiter at 10k rps` | default provider, deep model                       |
-| `?g what's the capital of mongolia`   | Groq (sub-second answer)                           |
-| `??a write a haiku about ohms law`    | Anthropic Sonnet                                   |
-| `?o explain gradient descent`         | OpenAI GPT-4o-mini                                 |
-| `?l summarize this for me…`           | Local Ollama — no API call leaves your machine     |
-| `?c help me refactor this`            | Ollama Cloud                                       |
-| `= 1.5 BTC to USD`                    | qalc with currency                                 |
-| `42 * sqrt(7)`                        | auto-detected math                                 |
-| `g rust async traits`                 | Google in your browser                             |
-| `gh tokio runtime`                    | GitHub code search                                 |
-| `> df -h /`                           | runs it, popup with output                         |
-| `https://news.ycombinator.com`        | opens URL                                          |
-| `firefox`                             | drun fallback launches the app                     |
+1. Press your hotkey (e.g. Super+A).
+2. **Picker** appears with 5 providers; your configured default has a ★ next to it and the cursor is on it. Providers with no API key configured show ⚠. `↵` to start.
+3. **Chat** opens — a rofi popup with an input field and the latest AI reply rendered above it. Type, `↵` to send. Reply appears above the input on the next turn (and is auto-copied to clipboard). Conversation continues until you hit `Esc` or submit an empty message.
+
+The conversation is kept entirely in memory for the session; nothing is saved to disk between sessions.
 
 ## Uninstall
 
