@@ -34,14 +34,19 @@ inputbar {
     padding:            12px 16px;
     border-radius:      10px;
     spacing:            10px;
-    children:           [ prompt ];
+    children:           [ prompt, entry ];
 }
 
 prompt {
     text-color:         @accent;
 }
 
-entry { enabled: false; }
+entry {
+    text-color:         @fg;
+    placeholder:        "type a message…";
+    placeholder-color:  @fg-dim;
+    cursor:             text;
+}
 
 message {
     background-color:   @bg-alt;

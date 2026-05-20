@@ -222,10 +222,12 @@ history_oneliners() {
   jq -r '
     . as $msgs
     | range(length-1; -1; -1) as $i
-    | $msgs[$i] | (if .role == "user" then "  " else "  " end) +
+    | $msgs[$i] | (if .role == "user" then "› you   " else "‹ ai    " end) +
       ((.content | gsub("\n"; " ⏎ ")) | if length > 140 then .[0:137] + "…" else . end)
   ' "$SESSION"
 }
+
+CLOSE_ITEM="✕  end session"
 
 chat() {
   local provider="$1"
@@ -237,25 +239,51 @@ chat() {
 
   local last_reply=""
   while true; do
-    local items; items=$(history_oneliners)
+    local items hist
+    hist=$(history_oneliners)
+    if [ -n "$hist" ]; then
+      items="$CLOSE_ITEM"$'\n'"$hist"
+    else
+      items="$CLOSE_ITEM"
+    fi
 
     local mesg
     if [ -z "$last_reply" ]; then
-      mesg="◆ chatting with $provider · $model    ·    ↵ send   esc end"
+      mesg="◆ $provider · $model    type a message and press ↵ · pick ✕ to close"
     else
       local preview="$last_reply"
       if [ ${#preview} -gt 1400 ]; then preview="${preview:0:1397}…"; fi
       mesg="$preview"
     fi
 
-    local input
+    local input rc=0
     input=$(printf '%s' "$items" | rofi_run -dmenu \
       -p 'you' \
       -mesg "$mesg" \
       -i \
-      "${theme[@]}") || break
+      "${theme[@]}") || rc=$?
 
-    [ -z "${input// }" ] && break
+    if [ $rc -ne 0 ]; then
+      log "rofi cancelled (rc=$rc) — staying open"
+      continue
+    fi
+
+    if [ "$input" = "$CLOSE_ITEM" ]; then
+      log "close selected"
+      break
+    fi
+
+    if [ -z "${input// }" ]; then
+      log "empty input — staying open"
+      continue
+    fi
+
+    case "$input" in
+      "› you   "*|"‹ ai    "*)
+        log "history line selected — ignoring"
+        continue
+        ;;
+    esac
 
     jq --arg c "$input" '. + [{role:"user",content:$c}]' "$SESSION" > "$SESSION.tmp" && mv "$SESSION.tmp" "$SESSION"
 
