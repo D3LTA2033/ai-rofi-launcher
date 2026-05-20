@@ -2,7 +2,5 @@
 *.swo
 *~
 .DS_Store
-config
 *.local
-config/ai-rofi-config
-
+/config/ai-rofi-config
