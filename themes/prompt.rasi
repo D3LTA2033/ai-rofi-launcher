@@ -1,0 +1,93 @@
+* {
+    bg:         #1e1e2e;
+    bg-alt:     #313244;
+    bg-input:   #181825;
+    fg:         #cdd6f4;
+    fg-dim:     #a6adc8;
+    accent:     #89b4fa;
+    accent-2:   #cba6f7;
+    urgent:     #f38ba8;
+    selected:   #45475a;
+
+    background-color:   transparent;
+    text-color:         @fg;
+    font:               "JetBrainsMono Nerd Font 13";
+}
+
+window {
+    transparency:       "real";
+    background-color:   @bg;
+    border:             2px;
+    border-color:       @accent;
+    border-radius:      14px;
+    padding:            10px;
+    width:              640px;
+    location:           center;
+    anchor:             center;
+}
+
+mainbox {
+    children:           [ inputbar, message, listview ];
+    spacing:            8px;
+}
+
+inputbar {
+    background-color:   @bg-input;
+    text-color:         @fg;
+    padding:            14px 16px;
+    border-radius:      10px;
+    spacing:            10px;
+    children:           [ prompt, entry ];
+}
+
+prompt {
+    enabled:            true;
+    text-color:         @accent;
+    str:                "λ";
+}
+
+entry {
+    text-color:         @fg;
+    placeholder:        "ask anything…  ? ai · ?? deep · = calc · > shell";
+    placeholder-color:  @fg-dim;
+    cursor:             text;
+}
+
+message {
+    background-color:   @bg-alt;
+    border-radius:      8px;
+    padding:            8px 12px;
+}
+
+textbox {
+    text-color:         @fg-dim;
+    background-color:   transparent;
+    font:               "JetBrainsMono Nerd Font 10";
+}
+
+listview {
+    lines:              7;
+    spacing:            3px;
+    padding:            4px 0;
+    scrollbar:          false;
+    fixed-height:       false;
+    dynamic:            true;
+}
+
+element {
+    padding:            9px 14px;
+    border-radius:      8px;
+    text-color:         @fg;
+    background-color:   transparent;
+}
+
+element selected {
+    background-color:   @accent;
+    text-color:         @bg;
+}
+
+element-text {
+    background-color:   inherit;
+    text-color:         inherit;
+    vertical-align:     0.5;
+}

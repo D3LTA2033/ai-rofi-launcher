@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_NAME="ai-rofi-launcher"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/$APP_NAME"
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/$APP_NAME"
+HIST="$CACHE_DIR/history"
+CONFIG="$CONF_DIR/config"
+THEME_PROMPT="$CONF_DIR/themes/prompt.rasi"
+THEME_VIEW="$CONF_DIR/themes/view.rasi"
+mkdir -p "$CACHE_DIR" "$CONF_DIR/themes"
+[ -f "$HIST" ] || : > "$HIST"
+
+MODEL_FAST="${LAUNCH_MODEL_FAST:-claude-haiku-4-5-20251001}"
+MODEL_DEEP="${LAUNCH_MODEL_DEEP:-claude-sonnet-4-6}"
+
+if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -f "$CONFIG" ]; then
+  set -a; . "$CONFIG"; set +a
+fi
+
+THEME_FLAG=()
+[ -f "$THEME_PROMPT" ] && THEME_FLAG=(-theme "$THEME_PROMPT")
+
+notify() { command -v notify-send >/dev/null && notify-send -a "$APP_NAME" "$1" "${2:-}" || true; }
+copy()   { printf '%s' "$1" | (command -v wl-copy >/dev/null && wl-copy || xclip -selection clipboard); }
+
+remember() {
+  local q="$1"
+  { printf '%s\n' "$q"; grep -vxF -- "$q" "$HIST" 2>/dev/null || true; } \
+    | head -n 50 > "$HIST.tmp" && mv "$HIST.tmp" "$HIST"
+}
+
+show_result() {
+  local title="$1" body="$2"
+  copy "$body"
+  local view_args=()
+  [ -f "$THEME_VIEW" ] && view_args=(-theme "$THEME_VIEW")
+  printf '%s' "$body" \
+    | rofi -dmenu -p "$title" -mesg "  copied · ↵ close" -i -no-custom \
+           "${view_args[@]}" >/dev/null 2>&1 || true
+  notify "$title" "${body:0:300}"
+}
+
+ai_call() {
+  local model="$1" prompt="$2"
+  if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+    notify "missing API key" "edit $CONFIG"
+    exit 1
+  fi
+  notify "  thinking…" "$model"
+  local resp
+  resp=$(curl -sS --max-time 45 https://api.anthropic.com/v1/messages \
+    -H "x-api-key: $ANTHROPIC_API_KEY" \
+    -H "anthropic-version: 2023-06-01" \
+    -H "content-type: application/json" \
+    -d "$(jq -n --arg m "$model" --arg p "$prompt" '{
+      model:$m, max_tokens:1024,
+      system:"You are a terse desktop assistant. Plain text only, no markdown headers, no preamble. Under 6 short lines unless asked for more.",
+      messages:[{role:"user",content:$p}]
+    }')")
+  jq -r '.content[0].text // .error.message // "no response"' <<<"$resp"
+}
+
+open_url() { (xdg-open "$1" >/dev/null 2>&1 &) ; }
+urlenc()   { jq -rn --arg s "$1" '$s|@uri'; }
+
+INPUT=$(rofi -dmenu -p '' "${THEME_FLAG[@]}" -i \
+              -mesg '  ai    deep   = calc   g/gh/yt/w/d   > shell   :emoji' \
+              -input "$HIST" < "$HIST")
+
+[ -z "${INPUT// }" ] && exit 0
+remember "$INPUT"
+
+case "$INPUT" in
+  '??'*)
+    Q="${INPUT#??}"; Q="${Q# }"
+    show_result "  $Q" "$(ai_call "$MODEL_DEEP" "$Q")"
+    ;;
+  '?'*)
+    Q="${INPUT#?}"; Q="${Q# }"
+    show_result "  $Q" "$(ai_call "$MODEL_FAST" "$Q")"
+    ;;
+  '='*)
+    EXPR="${INPUT#=}"
+    show_result "=  $EXPR" "$(qalc -t -- "$EXPR" 2>&1)"
+    ;;
+  'g '*)   open_url "https://www.google.com/search?q=$(urlenc "${INPUT#g }")" ;;
+  'gh '*)  open_url "https://github.com/search?q=$(urlenc "${INPUT#gh }")&type=code" ;;
+  'yt '*)  open_url "https://www.youtube.com/results?search_query=$(urlenc "${INPUT#yt }")" ;;
+  'w '*)   open_url "https://en.wikipedia.org/w/index.php?search=$(urlenc "${INPUT#w }")" ;;
+  'd '*)   open_url "https://duckduckgo.com/?q=$(urlenc "${INPUT#d }")" ;;
+  '>'*)
+    CMD="${INPUT#>}"; CMD="${CMD# }"
+    OUT=$(bash -c "$CMD" 2>&1 || true)
+    show_result "$ $CMD" "${OUT:-(no output)}"
+    ;;
+  ':'*)
+    if command -v rofimoji >/dev/null; then rofimoji; else notify "$APP_NAME" "install rofimoji"; fi
+    ;;
+  http://*|https://*) open_url "$INPUT" ;;
+  *)
+    if [[ "$INPUT" =~ ^[0-9].*[-+*/^%].*[0-9.]+ ]]; then
+      show_result "=  $INPUT" "$(qalc -t -- "$INPUT" 2>&1)"
+    else
+      rofi -show drun -filter "$INPUT" "${THEME_FLAG[@]}" >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
