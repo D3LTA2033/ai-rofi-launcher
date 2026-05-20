@@ -11,32 +11,45 @@ THEME_PROMPT="$CONF_DIR/themes/prompt.rasi"
 THEME_VIEW="$CONF_DIR/themes/view.rasi"
 mkdir -p "$CACHE_DIR" "$CONF_DIR/themes"
 
+MODE="${LAUNCH_MODE:-web}"
+
 case "${1:-}" in
   --config|-c|config)
     if command -v ai-rofi-config >/dev/null; then exec ai-rofi-config "${@:2}"; fi
     echo "ai-rofi-config not found — edit $CONFIG_YAML manually" >&2
     exit 1
     ;;
+  --web|web)
+    MODE=web; shift || true ;;
+  --rofi|rofi)
+    MODE=rofi; shift || true ;;
   --help|-h|help)
     cat <<EOF
-launch — pure AI chat from a rofi popup
+launch — Talkroom AI chat
 usage:
-  launch                  open the chat (picks provider, then talks)
-  launch --config         open the config TUI
+  launch                  open Talkroom in your browser (default)
+  launch --rofi           use the minimal rofi popup chat instead
+  launch --config         open the config TUI (set provider, keys, models)
   launch --help           show this message
 
-picker:
-  arrow keys to pick a provider, Enter to start chatting.
-  the provider you set in launch --config is highlighted by default.
+env:
+  LAUNCH_MODE=rofi        make the rofi popup the default
 
-chat:
-  type a message, Enter to send. the AI reply appears at the top.
-  past turns are kept in context for the whole session.
-  empty input or Esc ends the session.
+Talkroom is a local web app served at http://127.0.0.1:8765 — voice
+input (mic button), text-to-speech (speak toggle), provider picker,
+multi-turn context. Multiple invocations share the same server.
 EOF
     exit 0
     ;;
 esac
+
+if [ "$MODE" = "web" ]; then
+  if command -v ai-rofi-config >/dev/null; then
+    exec ai-rofi-config serve
+  fi
+  echo "ai-rofi-config not found — falling back to rofi mode" >&2
+  MODE=rofi
+fi
 
 if [ -f "$CONFIG_YAML" ] && command -v ai-rofi-config >/dev/null; then
   set -a; eval "$(ai-rofi-config export)"; set +a

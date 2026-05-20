@@ -9,6 +9,7 @@ const usage = `ai-rofi-config — configure ai-rofi-launcher
 
 usage:
   ai-rofi-config            launch the interactive TUI
+  ai-rofi-config serve      start the Talkroom web UI on 127.0.0.1:8765
   ai-rofi-config export     print shell-evaluable env for the launcher
   ai-rofi-config migrate    migrate legacy shell config → YAML
   ai-rofi-config path       print config file path
@@ -24,6 +25,10 @@ func main() {
 	switch cmd {
 	case "", "tui":
 		if err := runTUI(); err != nil {
+			fail(err)
+		}
+	case "serve", "web":
+		if err := runServe(0); err != nil {
 			fail(err)
 		}
 	case "export":

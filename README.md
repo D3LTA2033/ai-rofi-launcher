@@ -11,13 +11,13 @@ A universal launcher for Linux that routes whatever you type to the right tool �
 
 ## Features
 
-- **Pure AI chat from a rofi popup.** Hit your hotkey, pick which AI you want for this session (your configured default is pre-highlighted — Enter accepts), then talk.
-- **Real multi-turn context** — every reply is computed with the full prior conversation, not as isolated questions.
-- **5 providers supported** — Anthropic Claude, OpenAI GPT, Groq Llama, local Ollama, Ollama Cloud. Per-session choice, no per-message prefixes to remember.
-- **Latest reply rendered in-line** above the input on the next turn, so you read the answer the same place you type the follow-up.
-- **Answers auto-copied to clipboard.**
+- **Talkroom web UI by default** — your hotkey opens a polished local web app with multi-chat sidebar, typewriter rendering, voice input, text-to-speech, and a per-session provider picker.
+- **5 providers** — Anthropic Claude, OpenAI GPT, Groq Llama, local Ollama, Ollama Cloud. Keys live in your YAML config; provider switch is a dropdown in the topbar.
+- **Multi-turn context** — full conversation history sent on every turn for real continuity.
+- **Local proxy** — your API keys never leave your machine; the Go binary serves the HTML and proxies requests to whichever provider you pick. CORS-free and key-safe.
+- **Voice in, voice out** — Web Speech API for mic input, SpeechSynthesis for reading replies aloud (toggleable).
+- **Rofi fallback** — `launch --rofi` keeps the minimal popup mode if you prefer keyboard-only.
 - **Bubbletea TUI for settings** — `launch --config` to edit provider, models, and keys with arrow keys.
-- **Catppuccin-styled rofi themes** — separate prompt + chat-view themes.
 
 ## Install
 
@@ -118,11 +118,13 @@ The bash launcher invokes `ai-rofi-config export` on every run if `config.yaml` 
 
 ## Flow
 
-1. Press your hotkey (e.g. Super+A).
-2. **Picker** appears with 5 providers; your configured default has a ★ next to it and the cursor is on it. Providers with no API key configured show ⚠. `↵` to start.
-3. **Chat** opens — a rofi popup with an input field and the latest AI reply rendered above it. Type, `↵` to send. Reply appears above the input on the next turn (and is auto-copied to clipboard). Conversation continues until you hit `Esc` or submit an empty message.
+1. Press your hotkey (e.g. Super+A) → `launch`.
+2. **Talkroom opens in your browser** at `http://127.0.0.1:8765`. The first invocation starts a local Go server; subsequent invocations reuse it (just open a new tab).
+3. **Pick a provider** from the topbar dropdown — defaults to whatever you set in `launch --config`. Only providers with a key configured (plus local Ollama) appear.
+4. **Type or speak.** Hit the mic to dictate (Web Speech API). Toggle "speak" to have replies read aloud. Tabbed sidebar for multiple conversations.
+5. **Multi-turn context** — every send includes the full conversation history so far.
 
-The conversation is kept entirely in memory for the session; nothing is saved to disk between sessions.
+To go keyboard-only: `launch --rofi`. To switch the default permanently: `LAUNCH_MODE=rofi launch` or export that var in your shell rc.
 
 ## Uninstall
 
