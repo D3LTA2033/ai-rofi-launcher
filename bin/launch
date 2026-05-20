@@ -11,15 +11,27 @@ THEME_VIEW="$CONF_DIR/themes/view.rasi"
 mkdir -p "$CACHE_DIR" "$CONF_DIR/themes"
 [ -f "$HIST" ] || : > "$HIST"
 
-MODEL_FAST="${LAUNCH_MODEL_FAST:-claude-haiku-4-5-20251001}"
-MODEL_DEEP="${LAUNCH_MODEL_DEEP:-claude-sonnet-4-6}"
+if [ -f "$CONFIG" ]; then set -a; . "$CONFIG"; set +a; fi
 
-if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -f "$CONFIG" ]; then
-  set -a; . "$CONFIG"; set +a
-fi
+DEFAULT_PROVIDER="${LAUNCH_PROVIDER:-anthropic}"
 
-THEME_FLAG=()
-[ -f "$THEME_PROMPT" ] && THEME_FLAG=(-theme "$THEME_PROMPT")
+A_FAST="${LAUNCH_ANTHROPIC_FAST:-claude-haiku-4-5-20251001}"
+A_DEEP="${LAUNCH_ANTHROPIC_DEEP:-claude-sonnet-4-6}"
+O_FAST="${LAUNCH_OPENAI_FAST:-gpt-4o-mini}"
+O_DEEP="${LAUNCH_OPENAI_DEEP:-gpt-4o}"
+G_FAST="${LAUNCH_GROQ_FAST:-llama-3.1-8b-instant}"
+G_DEEP="${LAUNCH_GROQ_DEEP:-llama-3.3-70b-versatile}"
+L_FAST="${LAUNCH_OLLAMA_FAST:-llama3.2:3b}"
+L_DEEP="${LAUNCH_OLLAMA_DEEP:-llama3.1:8b}"
+C_FAST="${LAUNCH_OLLAMA_CLOUD_FAST:-gpt-oss:20b}"
+C_DEEP="${LAUNCH_OLLAMA_CLOUD_DEEP:-gpt-oss:120b}"
+
+L_URL="${LAUNCH_OLLAMA_URL:-http://localhost:11434}"
+C_URL="${LAUNCH_OLLAMA_CLOUD_URL:-https://ollama.com}"
+
+SYS_PROMPT="You are a terse desktop assistant. Plain text only, no markdown headers, no preamble. Under 6 short lines unless asked for more."
+
+THEME_FLAG=(); [ -f "$THEME_PROMPT" ] && THEME_FLAG=(-theme "$THEME_PROMPT")
 
 notify() { command -v notify-send >/dev/null && notify-send -a "$APP_NAME" "$1" "${2:-}" || true; }
 copy()   { printf '%s' "$1" | (command -v wl-copy >/dev/null && wl-copy || xclip -selection clipboard); }
@@ -36,53 +48,153 @@ show_result() {
   local view_args=()
   [ -f "$THEME_VIEW" ] && view_args=(-theme "$THEME_VIEW")
   printf '%s' "$body" \
-    | rofi -dmenu -p "$title" -mesg "  copied · ↵ close" -i -no-custom \
+    | rofi -dmenu -p "$title" -mesg "copied · ↵ close" -i -no-custom \
            "${view_args[@]}" >/dev/null 2>&1 || true
   notify "$title" "${body:0:300}"
 }
 
-ai_call() {
-  local model="$1" prompt="$2"
-  if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-    notify "missing API key" "edit $CONFIG"
+need_key() {
+  local var="$1" hint="$2"
+  if [ -z "${!var:-}" ]; then
+    notify "missing $var" "set in $CONFIG · $hint"
     exit 1
   fi
-  notify "  thinking…" "$model"
-  local resp
-  resp=$(curl -sS --max-time 45 https://api.anthropic.com/v1/messages \
+}
+
+ai_anthropic() {
+  need_key ANTHROPIC_API_KEY "console.anthropic.com/settings/keys"
+  curl -sS --max-time 60 https://api.anthropic.com/v1/messages \
     -H "x-api-key: $ANTHROPIC_API_KEY" \
     -H "anthropic-version: 2023-06-01" \
     -H "content-type: application/json" \
-    -d "$(jq -n --arg m "$model" --arg p "$prompt" '{
-      model:$m, max_tokens:1024,
-      system:"You are a terse desktop assistant. Plain text only, no markdown headers, no preamble. Under 6 short lines unless asked for more.",
+    -d "$(jq -n --arg m "$1" --arg p "$2" --arg s "$SYS_PROMPT" '{
+      model:$m, max_tokens:1024, system:$s,
       messages:[{role:"user",content:$p}]
-    }')")
-  jq -r '.content[0].text // .error.message // "no response"' <<<"$resp"
+    }')" \
+    | jq -r '.content[0].text // .error.message // "no response"'
+}
+
+ai_openai() {
+  need_key OPENAI_API_KEY "platform.openai.com/api-keys"
+  curl -sS --max-time 60 https://api.openai.com/v1/chat/completions \
+    -H "Authorization: Bearer $OPENAI_API_KEY" \
+    -H "content-type: application/json" \
+    -d "$(jq -n --arg m "$1" --arg p "$2" --arg s "$SYS_PROMPT" '{
+      model:$m, max_tokens:1024,
+      messages:[{role:"system",content:$s},{role:"user",content:$p}]
+    }')" \
+    | jq -r '.choices[0].message.content // .error.message // "no response"'
+}
+
+ai_groq() {
+  need_key GROQ_API_KEY "console.groq.com/keys"
+  curl -sS --max-time 60 https://api.groq.com/openai/v1/chat/completions \
+    -H "Authorization: Bearer $GROQ_API_KEY" \
+    -H "content-type: application/json" \
+    -d "$(jq -n --arg m "$1" --arg p "$2" --arg s "$SYS_PROMPT" '{
+      model:$m, max_tokens:1024,
+      messages:[{role:"system",content:$s},{role:"user",content:$p}]
+    }')" \
+    | jq -r '.choices[0].message.content // .error.message // "no response"'
+}
+
+ai_ollama() {
+  local resp
+  resp=$(curl -sS --max-time 120 "$L_URL/api/chat" \
+    -H "content-type: application/json" \
+    -d "$(jq -n --arg m "$1" --arg p "$2" --arg s "$SYS_PROMPT" '{
+      model:$m, stream:false,
+      messages:[{role:"system",content:$s},{role:"user",content:$p}]
+    }')" 2>&1) || { notify "ollama unreachable" "$L_URL · is the daemon running?"; exit 1; }
+  jq -r '.message.content // .error // "no response"' <<<"$resp" 2>/dev/null || echo "$resp"
+}
+
+ai_ollama_cloud() {
+  need_key OLLAMA_API_KEY "ollama.com/settings/keys"
+  curl -sS --max-time 120 "$C_URL/api/chat" \
+    -H "Authorization: Bearer $OLLAMA_API_KEY" \
+    -H "content-type: application/json" \
+    -d "$(jq -n --arg m "$1" --arg p "$2" --arg s "$SYS_PROMPT" '{
+      model:$m, stream:false,
+      messages:[{role:"system",content:$s},{role:"user",content:$p}]
+    }')" \
+    | jq -r '.message.content // .error // "no response"'
+}
+
+model_for() {
+  case "$1:$2" in
+    anthropic:fast)    echo "$A_FAST" ;;
+    anthropic:deep)    echo "$A_DEEP" ;;
+    openai:fast)       echo "$O_FAST" ;;
+    openai:deep)       echo "$O_DEEP" ;;
+    groq:fast)         echo "$G_FAST" ;;
+    groq:deep)         echo "$G_DEEP" ;;
+    ollama:fast)       echo "$L_FAST" ;;
+    ollama:deep)       echo "$L_DEEP" ;;
+    ollama-cloud:fast) echo "$C_FAST" ;;
+    ollama-cloud:deep) echo "$C_DEEP" ;;
+  esac
+}
+
+provider_for_code() {
+  case "$1" in
+    a) echo anthropic ;;
+    o) echo openai ;;
+    g) echo groq ;;
+    l) echo ollama ;;
+    c) echo ollama-cloud ;;
+    *) echo "$DEFAULT_PROVIDER" ;;
+  esac
+}
+
+ai_call() {
+  local provider="$1" mode="$2" prompt="$3"
+  local model; model=$(model_for "$provider" "$mode")
+  notify "$provider · $model" "thinking…"
+  case "$provider" in
+    anthropic)    ai_anthropic    "$model" "$prompt" ;;
+    openai)       ai_openai       "$model" "$prompt" ;;
+    groq)         ai_groq         "$model" "$prompt" ;;
+    ollama)       ai_ollama       "$model" "$prompt" ;;
+    ollama-cloud) ai_ollama_cloud "$model" "$prompt" ;;
+    *) notify "$APP_NAME" "unknown provider: $provider"; exit 1 ;;
+  esac
 }
 
 open_url() { (xdg-open "$1" >/dev/null 2>&1 &) ; }
 urlenc()   { jq -rn --arg s "$1" '$s|@uri'; }
 
+MESG=" ai [$DEFAULT_PROVIDER] · ?? deep · ?a/o/g/l/c override · = calc · g/gh/yt · > shell · :emoji"
+
 INPUT=$(rofi -dmenu -p '' "${THEME_FLAG[@]}" -i \
-              -mesg '  ai    deep   = calc   g/gh/yt/w/d   > shell   :emoji' \
+              -mesg "$MESG" \
               -input "$HIST" < "$HIST")
 
 [ -z "${INPUT// }" ] && exit 0
 remember "$INPUT"
 
 case "$INPUT" in
+  '??a '*|'??o '*|'??g '*|'??l '*|'??c '*)
+    CODE="${INPUT:2:1}"; Q="${INPUT:4}"
+    PROV=$(provider_for_code "$CODE")
+    show_result "$PROV · deep · $Q" "$(ai_call "$PROV" deep "$Q")"
+    ;;
+  '?a '*|'?o '*|'?g '*|'?l '*|'?c '*)
+    CODE="${INPUT:1:1}"; Q="${INPUT:3}"
+    PROV=$(provider_for_code "$CODE")
+    show_result "$PROV · $Q" "$(ai_call "$PROV" fast "$Q")"
+    ;;
   '??'*)
     Q="${INPUT#??}"; Q="${Q# }"
-    show_result "  $Q" "$(ai_call "$MODEL_DEEP" "$Q")"
+    show_result "$DEFAULT_PROVIDER · deep · $Q" "$(ai_call "$DEFAULT_PROVIDER" deep "$Q")"
     ;;
   '?'*)
     Q="${INPUT#?}"; Q="${Q# }"
-    show_result "  $Q" "$(ai_call "$MODEL_FAST" "$Q")"
+    show_result "$DEFAULT_PROVIDER · $Q" "$(ai_call "$DEFAULT_PROVIDER" fast "$Q")"
     ;;
   '='*)
     EXPR="${INPUT#=}"
-    show_result "=  $EXPR" "$(qalc -t -- "$EXPR" 2>&1)"
+    show_result "= $EXPR" "$(qalc -t -- "$EXPR" 2>&1)"
     ;;
   'g '*)   open_url "https://www.google.com/search?q=$(urlenc "${INPUT#g }")" ;;
   'gh '*)  open_url "https://github.com/search?q=$(urlenc "${INPUT#gh }")&type=code" ;;
@@ -100,7 +212,7 @@ case "$INPUT" in
   http://*|https://*) open_url "$INPUT" ;;
   *)
     if [[ "$INPUT" =~ ^[0-9].*[-+*/^%].*[0-9.]+ ]]; then
-      show_result "=  $INPUT" "$(qalc -t -- "$INPUT" 2>&1)"
+      show_result "= $INPUT" "$(qalc -t -- "$INPUT" 2>&1)"
     else
       rofi -show drun -filter "$INPUT" "${THEME_FLAG[@]}" >/dev/null 2>&1 || true
     fi

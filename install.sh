@@ -117,37 +117,110 @@ ensure_path() {
     esac
 }
 
+write_config_template() {
+    local cfg="$1" provider="$2" key_line="$3"
+    {
+        echo "LAUNCH_PROVIDER=$provider"
+        echo
+        echo "# === Anthropic — https://console.anthropic.com/settings/keys ==="
+        [ "$provider" = anthropic ] && [ -n "$key_line" ] && echo "$key_line" || echo "# export ANTHROPIC_API_KEY=sk-ant-..."
+        echo "LAUNCH_ANTHROPIC_FAST=claude-haiku-4-5-20251001"
+        echo "LAUNCH_ANTHROPIC_DEEP=claude-sonnet-4-6"
+        echo
+        echo "# === OpenAI — https://platform.openai.com/api-keys ==="
+        [ "$provider" = openai ] && [ -n "$key_line" ] && echo "$key_line" || echo "# export OPENAI_API_KEY=sk-..."
+        echo "LAUNCH_OPENAI_FAST=gpt-4o-mini"
+        echo "LAUNCH_OPENAI_DEEP=gpt-4o"
+        echo
+        echo "# === Groq — https://console.groq.com/keys ==="
+        [ "$provider" = groq ] && [ -n "$key_line" ] && echo "$key_line" || echo "# export GROQ_API_KEY=gsk_..."
+        echo "LAUNCH_GROQ_FAST=llama-3.1-8b-instant"
+        echo "LAUNCH_GROQ_DEEP=llama-3.3-70b-versatile"
+        echo
+        echo "# === Ollama (local — no key needed) ==="
+        echo "LAUNCH_OLLAMA_URL=http://localhost:11434"
+        echo "LAUNCH_OLLAMA_FAST=llama3.2:3b"
+        echo "LAUNCH_OLLAMA_DEEP=llama3.1:8b"
+        echo
+        echo "# === Ollama Cloud — https://ollama.com/settings/keys ==="
+        [ "$provider" = ollama-cloud ] && [ -n "$key_line" ] && echo "$key_line" || echo "# export OLLAMA_API_KEY=..."
+        echo "LAUNCH_OLLAMA_CLOUD_URL=https://ollama.com"
+        echo "LAUNCH_OLLAMA_CLOUD_FAST=gpt-oss:20b"
+        echo "LAUNCH_OLLAMA_CLOUD_DEEP=gpt-oss:120b"
+    } > "$cfg"
+    chmod 600 "$cfg"
+}
+
+env_key_for() {
+    case "$1" in
+        anthropic)    echo ANTHROPIC_API_KEY ;;
+        openai)       echo OPENAI_API_KEY ;;
+        groq)         echo GROQ_API_KEY ;;
+        ollama-cloud) echo OLLAMA_API_KEY ;;
+        *)            echo "" ;;
+    esac
+}
+
 configure_key() {
-    hdr "api key"
+    hdr "ai providers"
     local cfg="$CONF_DIR/config"
+
+    if [ -f "$cfg" ] && grep -q '^LAUNCH_PROVIDER=' "$cfg"; then
+        ok "existing config detected at $cfg"
+        info "edit it manually to add provider keys or change models"
+        return 0
+    fi
+
     if [ -f "$cfg" ] && grep -q '^export ANTHROPIC_API_KEY=' "$cfg"; then
-        ok "key already configured in $cfg"
+        local existing; existing=$(grep '^export ANTHROPIC_API_KEY=' "$cfg" | head -1)
+        write_config_template "$cfg" anthropic "$existing"
+        ok "migrated legacy config to multi-provider format"
         return 0
     fi
-    if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-        printf 'export ANTHROPIC_API_KEY=%q\n' "$ANTHROPIC_API_KEY" > "$cfg"
-        chmod 600 "$cfg"
-        ok "saved key from env to $cfg"
-        return 0
+
+    info "supported providers:"
+    printf "    1) anthropic     %sClaude — recommended%s\n" "$c_c" "$c_reset"
+    printf "    2) openai        GPT family\n"
+    printf "    3) groq          fastest, generous free tier\n"
+    printf "    4) ollama        local, no key required\n"
+    printf "    5) ollama-cloud  hosted Ollama\n"
+
+    local provider="anthropic"
+    if [ -t 0 ]; then
+        printf "  default provider [1]: "
+        local choice=""; read -r choice || true
+        case "$choice" in
+            2) provider=openai ;;
+            3) provider=groq ;;
+            4) provider=ollama ;;
+            5) provider=ollama-cloud ;;
+            *) provider=anthropic ;;
+        esac
     fi
-    if [ ! -t 0 ]; then
-        warn "no key found and not running interactively"
-        warn "edit $cfg later and add: export ANTHROPIC_API_KEY=sk-ant-..."
-        : > "$cfg"; chmod 600 "$cfg"
-        return 0
+    ok "default: $provider"
+
+    local key_line=""
+    if [ "$provider" != ollama ]; then
+        local var; var=$(env_key_for "$provider")
+        if [ -n "${!var:-}" ]; then
+            key_line=$(printf 'export %s=%q' "$var" "${!var}")
+            ok "using $var from env"
+        elif [ -t 0 ]; then
+            info "paste your $var (input hidden, leave empty to skip):"
+            local key=""; IFS= read -r -s key || true; echo
+            if [ -n "$key" ]; then
+                key_line=$(printf 'export %s=%q' "$var" "$key")
+                ok "key captured"
+            else
+                warn "no key — edit $cfg later"
+            fi
+        else
+            warn "non-interactive — edit $cfg to add $var"
+        fi
     fi
-    info "paste your Anthropic API key (sk-ant-…), or leave empty to skip:"
-    local key=""
-    IFS= read -r -s key || true
-    echo
-    if [ -z "$key" ]; then
-        warn "no key entered — edit $cfg later"
-        : > "$cfg"; chmod 600 "$cfg"
-    else
-        printf 'export ANTHROPIC_API_KEY=%q\n' "$key" > "$cfg"
-        chmod 600 "$cfg"
-        ok "saved to $cfg (mode 600)"
-    fi
+
+    write_config_template "$cfg" "$provider" "$key_line"
+    ok "wrote $cfg (mode 600)"
 }
 
 detect_wm() {
