@@ -62,13 +62,22 @@ C_URL="${LAUNCH_OLLAMA_CLOUD_URL:-https://ollama.com}"
 
 SYS_PROMPT="You are a helpful conversational assistant. Be terse and direct. Plain text only, no markdown headers, no preamble. Keep responses under 8 short lines unless explicitly asked for more."
 
+DEBUG="${LAUNCH_DEBUG:-0}"
+log() { [ "$DEBUG" = 1 ] && printf '[launch] %s\n' "$*" >&2 || true; }
+
 ROFI_DISPLAY_ARGS=()
-if [ -n "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+if [ -n "${DISPLAY:-}" ]; then
   ROFI_DISPLAY_ARGS=(-display "$DISPLAY")
 fi
-export WAYLAND_DISPLAY=""
 
-rofi_run() { WAYLAND_DISPLAY="" rofi "${ROFI_DISPLAY_ARGS[@]}" "$@"; }
+rofi_run() {
+  log "rofi $*"
+  if [ -n "${DISPLAY:-}" ]; then
+    env -u WAYLAND_DISPLAY rofi "${ROFI_DISPLAY_ARGS[@]}" "$@"
+  else
+    rofi "$@"
+  fi
+}
 
 notify() { command -v notify-send >/dev/null && notify-send -a "$APP_NAME" "$1" "${2:-}" || true; }
 copy()   { printf '%s' "$1" | (command -v wl-copy >/dev/null && wl-copy || xclip -selection clipboard); }
@@ -244,7 +253,6 @@ chat() {
       -p 'you' \
       -mesg "$mesg" \
       -i \
-      -no-custom \
       "${theme[@]}") || break
 
     [ -z "${input// }" ] && break
@@ -266,9 +274,15 @@ chat() {
 }
 
 main() {
-  local provider
-  provider=$(pick_provider) || exit 0
-  [ -z "$provider" ] && exit 0
+  log "config_yaml=$CONFIG_YAML default=$DEFAULT_PROVIDER"
+  log "DISPLAY=${DISPLAY:-unset} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-unset}"
+  local provider rc=0
+  provider=$(pick_provider) || rc=$?
+  if [ -z "${provider:-}" ]; then
+    log "picker cancelled (rc=$rc)"
+    exit 0
+  fi
+  log "picked provider=$provider"
   if ! has_key "$provider"; then
     notify "$provider" "no API key configured — run: launch --config"
     exit 1
