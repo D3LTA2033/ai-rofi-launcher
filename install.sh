@@ -102,6 +102,22 @@ install_files() {
     ok "$CONF_DIR/themes/"
 }
 
+build_config_tool() {
+    hdr "config tool"
+    if ! command -v go >/dev/null; then
+        warn "go not found — skipping ai-rofi-config (TUI unavailable)"
+        warn "install Go (https://go.dev/dl/) then re-run this installer to enable launch --config"
+        return 0
+    fi
+    info "building ai-rofi-config (Go)"
+    (
+        cd "$SRC_DIR/config" || exit 1
+        go build -o "$BIN_DIR/ai-rofi-config" . 2>&1 | sed 's/^/    /'
+    ) || { err "build failed"; return 1; }
+    chmod +x "$BIN_DIR/ai-rofi-config"
+    ok "$BIN_DIR/ai-rofi-config"
+}
+
 ensure_path() {
     case ":$PATH:" in
         *":$BIN_DIR:"*) ok "PATH includes $BIN_DIR" ;;
@@ -310,16 +326,31 @@ EOF
 post_check() {
     hdr "all set"
     info "run it now:        launch"
-    info "edit your key at:  $CONF_DIR/config"
+    if [ -x "$BIN_DIR/ai-rofi-config" ]; then
+        info "configure TUI:     launch --config"
+    fi
+    info "edit YAML at:      $CONF_DIR/config.yaml"
     info "uninstall:         bash $SRC_DIR/uninstall.sh"
+}
+
+migrate_to_yaml() {
+    [ -x "$BIN_DIR/ai-rofi-config" ] || return 0
+    [ -f "$CONF_DIR/config.yaml" ] && return 0
+    [ -f "$CONF_DIR/config" ] || return 0
+    hdr "migrating shell config → YAML"
+    if "$BIN_DIR/ai-rofi-config" migrate 2>/dev/null; then
+        ok "config.yaml created"
+    fi
 }
 
 main() {
     printf "\n%s%s%s\n" "$c_b" "ai-rofi-launcher · installer" "$c_reset"
     ensure_deps
     install_files
+    build_config_tool
     ensure_path
     configure_key
+    migrate_to_yaml
     suggest_hotkey
     post_check
 }

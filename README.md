@@ -36,9 +36,48 @@ bash install.sh
 The installer:
 1. Detects your distro (pacman / apt / dnf / zypper / brew) and installs missing deps
 2. Copies `launch` to `~/.local/bin/` and themes to `~/.config/ai-rofi-launcher/themes/`
-3. Adds `~/.local/bin` to your `PATH` if missing
-4. Prompts for your Anthropic API key (saved to `~/.config/ai-rofi-launcher/config`, mode 600)
-5. Detects your window manager and prints the exact hotkey snippet to paste
+3. Builds `ai-rofi-config` (Go binary) for the interactive config TUI — if Go is installed
+4. Adds `~/.local/bin` to your `PATH` if missing
+5. Prompts you to pick a default provider and enter its API key
+6. Migrates any legacy shell config to `config.yaml`
+7. Detects your window manager and prints the exact hotkey snippet to paste
+
+## Configure
+
+```bash
+launch --config        # opens the TUI
+```
+
+Arrow-key navigation, `Enter` to edit a field, `c` to clear a key, `s` to save, `q` to quit. API keys are entered with hidden input and displayed as `●●●●●●●● set` once configured.
+
+Or edit `~/.config/ai-rofi-launcher/config.yaml` directly:
+
+```yaml
+default_provider: anthropic
+
+providers:
+  anthropic:
+    api_key: sk-ant-...
+    fast: claude-haiku-4-5-20251001
+    deep: claude-sonnet-4-6
+  openai:
+    api_key: ""
+    fast: gpt-4o-mini
+    deep: gpt-4o
+  groq:
+    api_key: gsk_...
+    fast: llama-3.1-8b-instant
+    deep: llama-3.3-70b-versatile
+  ollama:
+    url: http://localhost:11434
+    fast: llama3.2:3b
+    deep: llama3.1:8b
+  ollama_cloud:
+    api_key: ""
+    url: https://ollama.com
+    fast: gpt-oss:20b
+    deep: gpt-oss:120b
+```
 
 ## AI providers
 
@@ -67,36 +106,21 @@ The installer prints the right snippet for your WM. Common ones:
 | KDE       | Settings → Shortcuts → Custom → Global → `~/.local/bin/launch`  |
 | GNOME     | Settings → Keyboard → Custom Shortcut → `~/.local/bin/launch`   |
 
-## Configuration
+## Themes
 
-`~/.config/ai-rofi-launcher/config`:
+`~/.config/ai-rofi-launcher/themes/` — edit `prompt.rasi` (the input bar) and `view.rasi` (the result viewer) to taste. Default palette is Catppuccin Mocha.
+
+## Advanced — `ai-rofi-config` subcommands
 
 ```bash
-LAUNCH_PROVIDER=anthropic       # anthropic | openai | groq | ollama | ollama-cloud
-
-export ANTHROPIC_API_KEY=sk-ant-...
-LAUNCH_ANTHROPIC_FAST=claude-haiku-4-5-20251001
-LAUNCH_ANTHROPIC_DEEP=claude-sonnet-4-6
-
-# export OPENAI_API_KEY=sk-...
-LAUNCH_OPENAI_FAST=gpt-4o-mini
-LAUNCH_OPENAI_DEEP=gpt-4o
-
-# export GROQ_API_KEY=gsk_...
-LAUNCH_GROQ_FAST=llama-3.1-8b-instant
-LAUNCH_GROQ_DEEP=llama-3.3-70b-versatile
-
-LAUNCH_OLLAMA_URL=http://localhost:11434
-LAUNCH_OLLAMA_FAST=llama3.2:3b
-LAUNCH_OLLAMA_DEEP=llama3.1:8b
-
-# export OLLAMA_API_KEY=...
-LAUNCH_OLLAMA_CLOUD_URL=https://ollama.com
-LAUNCH_OLLAMA_CLOUD_FAST=gpt-oss:20b
-LAUNCH_OLLAMA_CLOUD_DEEP=gpt-oss:120b
+ai-rofi-config              # opens the TUI
+ai-rofi-config export       # prints shell-evaluable env (used internally by launch)
+ai-rofi-config migrate      # converts legacy shell config to config.yaml
+ai-rofi-config path         # prints the config file path
+ai-rofi-config show         # prints current config as YAML
 ```
 
-The installer writes this template for you; you only fill in the keys you actually want to use. Themes live in `~/.config/ai-rofi-launcher/themes/` — edit `prompt.rasi` and `view.rasi` to taste.
+The bash launcher invokes `ai-rofi-config export` on every run if `config.yaml` exists, falling back to the legacy shell config otherwise — so this remains fully backward compatible.
 
 ## Examples
 
@@ -129,6 +153,7 @@ Removes the script, themes, config, and history. WM hotkey bindings you set your
 
 Required: `rofi`, `libqalculate` (qalc), `xdotool`, `jq`, `curl`
 Optional: `libnotify` (notify-send), `xclip` or `wl-clipboard`, `xdg-utils`, `rofimoji`
+For the config TUI: `go` (used only at install time to build a single static binary)
 
 ## License
 

@@ -6,12 +6,46 @@ CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/$APP_NAME"
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/$APP_NAME"
 HIST="$CACHE_DIR/history"
 CONFIG="$CONF_DIR/config"
+CONFIG_YAML="$CONF_DIR/config.yaml"
 THEME_PROMPT="$CONF_DIR/themes/prompt.rasi"
 THEME_VIEW="$CONF_DIR/themes/view.rasi"
 mkdir -p "$CACHE_DIR" "$CONF_DIR/themes"
 [ -f "$HIST" ] || : > "$HIST"
 
-if [ -f "$CONFIG" ]; then set -a; . "$CONFIG"; set +a; fi
+case "${1:-}" in
+  --config|-c|config)
+    if command -v ai-rofi-config >/dev/null; then exec ai-rofi-config "${@:2}"; fi
+    echo "ai-rofi-config not found — install it or edit $CONFIG_YAML manually" >&2
+    exit 1
+    ;;
+  --help|-h|help)
+    cat <<EOF
+launch — universal launcher
+usage:
+  launch                  open the launcher
+  launch --config         open the config TUI
+  launch --help           show this message
+
+prefixes (type these in the launcher):
+  ?<q>     ask AI (default provider, fast)
+  ??<q>    ask AI (default provider, deep model)
+  ?a/o/g/l/c <q>    force anthropic/openai/groq/ollama-local/ollama-cloud
+  ??a/o/g/l/c <q>   same, deep model
+  =<expr>           calculator (qalc)
+  g/gh/yt/w/d <q>   web search
+  ><cmd>            shell command
+  :emoji            emoji picker
+  https://...       open URL
+EOF
+    exit 0
+    ;;
+esac
+
+if [ -f "$CONFIG_YAML" ] && command -v ai-rofi-config >/dev/null; then
+  set -a; eval "$(ai-rofi-config export)"; set +a
+elif [ -f "$CONFIG" ]; then
+  set -a; . "$CONFIG"; set +a
+fi
 
 DEFAULT_PROVIDER="${LAUNCH_PROVIDER:-anthropic}"
 

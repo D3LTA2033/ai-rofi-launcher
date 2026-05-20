@@ -3,6 +3,7 @@ set -euo pipefail
 
 APP_NAME="ai-rofi-launcher"
 BIN="${HOME}/.local/bin/launch"
+CFG_BIN="${HOME}/.local/bin/ai-rofi-config"
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/$APP_NAME"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/$APP_NAME"
 
@@ -11,6 +12,7 @@ ok()   { printf "  %s✓%s %s\n" "$c_g" "$c_reset" "$1"; }
 warn() { printf "  %s!%s %s\n" "$c_y" "$c_reset" "$1"; }
 
 [ -f "$BIN" ]       && rm -f "$BIN"       && ok "removed $BIN"       || warn "$BIN not found"
+[ -f "$CFG_BIN" ]   && rm -f "$CFG_BIN"   && ok "removed $CFG_BIN"   || warn "$CFG_BIN not found"
 [ -d "$CONF_DIR" ]  && rm -rf "$CONF_DIR" && ok "removed $CONF_DIR"  || warn "$CONF_DIR not found"
 [ -d "$CACHE_DIR" ] && rm -rf "$CACHE_DIR"&& ok "removed $CACHE_DIR" || warn "$CACHE_DIR not found"
 
